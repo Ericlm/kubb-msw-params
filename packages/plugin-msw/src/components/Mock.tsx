@@ -11,9 +11,10 @@ type Props = {
   fakerName: string
   baseURL: string | undefined
   operation: Operation
+  queryTypeName: string | undefined
 }
 
-export function Mock({ baseURL = '', name, typeName, operation }: Props) {
+export function Mock({ baseURL = '', name, typeName, operation, queryTypeName }: Props) {
   const method = operation.method
   const successStatusCodes = operation.getResponseStatusCodes().filter((code) => code.startsWith('2'))
   const statusCode = successStatusCodes.length > 0 ? Number(successStatusCodes[0]) : 200
@@ -32,17 +33,44 @@ export function Mock({ baseURL = '', name, typeName, operation }: Props) {
   const params = FunctionParams.factory({
     data: {
       type: `${dataType} | ((
-        info: Parameters<Parameters<typeof http.${method}>[1]>[0],
+        info: Parameters<Parameters<typeof http.${method}>[1]>[0]${queryTypeName ? ` & {query: ${queryTypeName}}` : ''}
       ) => Response | Promise<Response>)`,
       optional: true,
     },
   })
 
+  const returnData = `return data(info)`
+
+  /** Record for query params. */
+  let queryRecord: Record<string, 'single' | 'multiple'> = {}
+
+  if (queryTypeName) {
+    const queryParamsSchema = operation.getParameters().filter((p) => p.in === 'query')
+
+    for (const param of queryParamsSchema) {
+      const schema = param.schema as OasTypes.SchemaObject
+      queryRecord[param.name] = schema?.type === 'array' ? 'multiple' : 'single'
+    }
+  }
+
+  const queryParamsGeneration = queryTypeName
+    ? `
+  const url = new URL(info.request.url)
+
+  const query: Record<keyof ${queryTypeName}, string | string[] | null> = {
+    ${Object.entries(queryRecord).map(([key, value]) => `${key}: url.searchParams.${value === 'multiple' ? 'getAll' : 'get'}('${key}')`)}
+  }
+  `
+    : ''
+
   return (
     <File.Source name={name} isIndexable isExportable>
       <Function name={name} export params={params.toConstructor()}>
         {`return http.${method}('${baseURL}${url.replace(/([^/]):/g, '$1\\\\:')}', function handler(info) {
-    if(typeof data === 'function') return data(info)
+  if(typeof data === 'function') {
+  ${queryParamsGeneration}
+    ${queryTypeName ? 'return data({...info, query})' : returnData}
+  }
 
     return new Response(JSON.stringify(data), {
       status: ${statusCode},
