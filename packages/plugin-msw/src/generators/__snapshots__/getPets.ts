@@ -19,9 +19,20 @@ export function listPetsResponse400(data?: ListPets400) {
   })
 }
 
-export function listPets(data?: ListPetsQueryResponse | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Response | Promise<Response>)) {
+export function listPets(
+  data?: ListPetsQueryResponse | ((info: Parameters<Parameters<typeof http.get>[1]>[0] & { query: ListPetsQueryParams }) => Response | Promise<Response>),
+) {
   return http.get('/pets', function handler(info) {
-    if (typeof data === 'function') return data(info)
+    if (typeof data === 'function') {
+      const url = new URL(info.request.url)
+
+      const query: Record<keyof ListPetsQueryParams, string | string[] | null> = {
+        limit: url.searchParams.get('limit'),
+        ids: url.searchParams.getAll('ids'),
+      }
+
+      return data({ ...info, query })
+    }
 
     return new Response(JSON.stringify(data), {
       status: 200,
