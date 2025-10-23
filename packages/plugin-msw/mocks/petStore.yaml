@@ -20,6 +20,13 @@ paths:
           required: false
           schema:
             type: string
+        - name: ids
+          in: query
+          description: Items with specified id
+          schema:
+            type: array
+            items:
+              schema: string
       responses:
         '200':
           description: A paged array of pets
