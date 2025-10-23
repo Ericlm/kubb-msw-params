@@ -30,16 +30,22 @@ export function Mock({ baseURL = '', name, typeName, operation, queryTypeName }:
   // If no response schema, uses any type but function to avoid overriding callback
   const dataType = hasResponseSchema ? typeName : 'string | number | boolean | null | object'
 
+  let infoType = `Parameters<Parameters<typeof http.${method}>[1]>[0]`
+
+  if (queryTypeName) {
+    infoType += ` & { query: ${queryTypeName} }`
+  }
+
   const params = FunctionParams.factory({
     data: {
       type: `${dataType} | ((
-        info: Parameters<Parameters<typeof http.${method}>[1]>[0]${queryTypeName ? ` & {query: ${queryTypeName}}` : ''}
+        info: ${infoType}
       ) => Response | Promise<Response>)`,
       optional: true,
     },
   })
 
-  const returnData = `return data(info)`
+  let returnData = `return data(info)`
 
   /** Record for query params. */
   let queryRecord: Record<string, 'single' | 'multiple'> = {}
@@ -51,8 +57,11 @@ export function Mock({ baseURL = '', name, typeName, operation, queryTypeName }:
       const schema = param.schema as OasTypes.SchemaObject
       queryRecord[param.name] = schema?.type === 'array' ? 'multiple' : 'single'
     }
+
+    returnData = 'return data({ ...info, query})'
   }
 
+  // Generates a URL then a record to contain all query params
   const queryParamsGeneration = queryTypeName
     ? `
   const url = new URL(info.request.url)
@@ -62,14 +71,13 @@ export function Mock({ baseURL = '', name, typeName, operation, queryTypeName }:
   }
   `
     : ''
-
   return (
     <File.Source name={name} isIndexable isExportable>
       <Function name={name} export params={params.toConstructor()}>
         {`return http.${method}('${baseURL}${url.replace(/([^/]):/g, '$1\\\\:')}', function handler(info) {
   if(typeof data === 'function') {
   ${queryParamsGeneration}
-    ${queryTypeName ? 'return data({...info, query})' : returnData}
+    ${returnData}
   }
 
     return new Response(JSON.stringify(data), {
