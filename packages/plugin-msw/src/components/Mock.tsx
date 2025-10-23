@@ -30,7 +30,7 @@ export function Mock({ baseURL = '', name, typeName, operation, queryTypeName }:
   // If no response schema, uses any type but function to avoid overriding callback
   const dataType = hasResponseSchema ? typeName : 'string | number | boolean | null | object'
 
-  let infoType = `Parameters<Parameters<typeof http.${method}>[1]>[0]`
+  let infoType = `Parameters<HttpResponseResolver>[0]`
 
   if (queryTypeName) {
     infoType += ` & { query: ${queryTypeName} }`
